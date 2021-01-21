@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: Spring-Reactive-Data-Redis
+
+  # Redis DB configuration
+  redis:
+    host: localhost
+    port: 6379
+    database: 0
+    password: 50M3*S3cured*Pa55W0rd
+
+# Server configuration
+server:
+  port: 8086
+  error:
+    include-message: always
+
+# Logging settings
+logging:
+  level:
+    root: INFO
+    com.habeebcycle: DEBUG
+    org.springframework.data.redis: DEBUG
+
+
+---
+spring:
+  config:
+    activate:
+      on-profile:
+        - docker
+      on-cloud-platform: KUBERNETES
+  redis:
+    host: redis-db
+
+server:
+  port: 8080

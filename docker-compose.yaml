@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  user-service:
+    build: .
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    container_name: user-service
+    depends_on:
+      - redis-db
+
+  redis-db:
+    image: redis:alpine
+    ports:
+    - "6379:6379"
+    environment:
+      - REDIS_REPLICATION_MODE=master
+    container_name: redis-db
+    command: redis-server --requirepass 50M3*S3cured*Pa55W0rd
+    healthcheck:
+      test: ["CMD", "redis-cli", "auth", "50M3*S3cured*Pa55W0rd", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
