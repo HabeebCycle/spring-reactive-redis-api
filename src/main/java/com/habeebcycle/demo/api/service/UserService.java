@@ -2,6 +2,7 @@ package com.habeebcycle.demo.api.service;
 
 import com.habeebcycle.demo.api.persistence.UserRepoImpl;
 import com.habeebcycle.demo.api.model.User;
+import com.habeebcycle.demo.api.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -9,9 +10,9 @@ import reactor.core.publisher.Mono;
 @Service
 public class UserService {
 
-    private final UserRepoImpl repository;
+    private final UserRepository repository;
 
-    public UserService(UserRepoImpl repository) {
+    public UserService(UserRepository repository) {
         this.repository = repository;
     }
 

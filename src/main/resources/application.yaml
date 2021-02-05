@@ -29,7 +29,6 @@ spring:
     activate:
       on-profile:
         - docker
-      on-cloud-platform: KUBERNETES
   redis:
     host: redis-db
 

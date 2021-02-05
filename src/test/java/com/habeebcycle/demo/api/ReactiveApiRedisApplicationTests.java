@@ -45,10 +45,25 @@ class ReactiveApiRedisApplicationTests {
 
 	@Test
 	void createUserTest() {
-		User user = new User("username", "email", "name");
+		User userA = new User("username", "email", "name");
 
-		postAndVerifyUser(user, HttpStatus.OK)
-				.jsonPath("$.id").isNotEmpty();
+		postAndVerifyUser(userA, HttpStatus.OK)
+				.jsonPath("$.id").isNotEmpty()
+				.jsonPath("$.username").isEqualTo("username")
+				.jsonPath("$.email").isEqualTo("email")
+				.jsonPath("$.name").isEqualTo("name");
+
+		// Return error for empty username
+		User userB = new User("", "emailB@email.com", "name");
+		postAndVerifyUser(userB, HttpStatus.INTERNAL_SERVER_ERROR)
+				.jsonPath("$.path").isEqualTo("/user")
+				.jsonPath("$.message").isEqualTo("Cannot be saved: username and email are required, but one or both is empty.");
+
+		// Return error for empty email
+		User userC = new User("usernameC", "", "name");
+		postAndVerifyUser(userB, HttpStatus.INTERNAL_SERVER_ERROR)
+				.jsonPath("$.path").isEqualTo("/user")
+				.jsonPath("$.message").isEqualTo("Cannot be saved: username and email are required, but one or both is empty.");
 
 		StepVerifier.create(userService.userCount())
 				.expectNext(1L)
@@ -63,14 +78,17 @@ class ReactiveApiRedisApplicationTests {
 		postAndVerifyUser(user, HttpStatus.OK)
 				.jsonPath("$.id").isNotEmpty();
 
-		user = userService.getUserByUsername(user.getUsername()).block();
-		Assertions.assertNotNull(user);
-		Assertions.assertNotNull(user.getId());
+		User foundUser = userService.getUserByUsername(user.getUsername()).block();
+		Assertions.assertNotNull(foundUser);
+		Assertions.assertNotNull(foundUser.getId());
+		Assertions.assertEquals(user.getUsername(), foundUser.getUsername());
+		Assertions.assertEquals(user.getEmail(), foundUser.getEmail());
+		Assertions.assertEquals(user.getName(), foundUser.getName());
 
-		getAndVerifyUserById(user.getId(), HttpStatus.OK)
-				.jsonPath("$.username").isEqualTo("username")
-				.jsonPath("$.email").isEqualTo("email@aol.com")
-				.jsonPath("$.name").isEqualTo("name");
+		getAndVerifyUserById(foundUser.getId(), HttpStatus.OK)
+				.jsonPath("$.username").isEqualTo(user.getUsername())
+				.jsonPath("$.email").isEqualTo(user.getEmail())
+				.jsonPath("$.name").isEqualTo(user.getName());
 
 		StepVerifier.create(userService.userCount())
 				.expectNext(1L)
@@ -97,22 +115,86 @@ class ReactiveApiRedisApplicationTests {
 
 	@Test
 	void duplicateErrorTest() {
-		User user = new User("username", "email@aol.com", "name");
-
-		postAndVerifyUser(user, HttpStatus.OK)
+		// Create and save userA, verify it has saved correctly
+		User userA = new User("username", "email@aol.com", "name");
+		postAndVerifyUser(userA, HttpStatus.OK)
+				.jsonPath("$.id").isNotEmpty()
 				.jsonPath("$.username").isEqualTo("username")
 				.jsonPath("$.email").isEqualTo("email@aol.com")
 				.jsonPath("$.name").isEqualTo("name");
 
-		user = new User("username", "email@aol.com", "name");
-
-		postAndVerifyUser(user, HttpStatus.INTERNAL_SERVER_ERROR)
+		// Create and try to save userB with the same username and verify it fails
+		User userB = new User("username", "new_email@aol.com", "name");
+		postAndVerifyUser(userB, HttpStatus.INTERNAL_SERVER_ERROR)
 				.jsonPath("$.path").isEqualTo("/user")
 				.jsonPath("$.message").isEqualTo("Duplicate key, Username: " +
-									user.getUsername() + " or Email: " + user.getEmail() + " exists.");
+									userB.getUsername() + " or Email: " + userB.getEmail() + " exists.");
 
+		// Create and try to save userB with the same email and verify it fails
+		userB = new User("new_username", "email@aol.com", "name");
+		postAndVerifyUser(userB, HttpStatus.INTERNAL_SERVER_ERROR)
+				.jsonPath("$.path").isEqualTo("/user")
+				.jsonPath("$.message").isEqualTo("Duplicate key, Username: " +
+				userB.getUsername() + " or Email: " + userB.getEmail() + " exists.");
+
+		// Create and try to save userB with the same username and email and verify it fails
+		userB = new User("username", "email@aol.com", "name");
+		postAndVerifyUser(userB, HttpStatus.INTERNAL_SERVER_ERROR)
+				.jsonPath("$.path").isEqualTo("/user")
+				.jsonPath("$.message").isEqualTo("Duplicate key, Username: " +
+				userB.getUsername() + " or Email: " + userB.getEmail() + " exists.");
+
+		// Create and try to save userB with the different username and email and verify it works
+		userB = new User("new_username", "new_email@aol.com", "name");
+		postAndVerifyUser(userB, HttpStatus.OK)
+				.jsonPath("$.id").isNotEmpty()
+				.jsonPath("$.username").isEqualTo("new_username")
+				.jsonPath("$.email").isEqualTo("new_email@aol.com")
+				.jsonPath("$.name").isEqualTo("name");
+
+
+		// Try to update userA with the same email of userB and verify it fails
+		userA = userService.getUserByUsername(userA.getUsername()).block();
+		Assertions.assertNotNull(userA);
+		Assertions.assertNotNull(userA.getId());
+
+		userA.setEmail(userB.getEmail());
+		updateAndVerifyUser(userA, HttpStatus.INTERNAL_SERVER_ERROR)
+				.jsonPath("$.path").isEqualTo("/user/" + userA.getId())
+				.jsonPath("$.message").isEqualTo("Duplicate key, Username: " +
+				userA.getUsername() + " or Email: " + userA.getEmail() + " exists.");
+
+		// Try to update userA with the same username of userB and verify it fails
+		userA.setUsername(userB.getUsername());
+		updateAndVerifyUser(userA, HttpStatus.INTERNAL_SERVER_ERROR)
+				.jsonPath("$.path").isEqualTo("/user/" + userA.getId())
+				.jsonPath("$.message").isEqualTo("Duplicate key, Username: " +
+				userA.getUsername() + " or Email: " + userA.getEmail() + " exists.");
+
+		// Try to update userA with the same username and email of userB and verify it fails
+		userA.setUsername(userB.getUsername());
+		userA.setEmail(userB.getEmail());
+		updateAndVerifyUser(userA, HttpStatus.INTERNAL_SERVER_ERROR)
+				.jsonPath("$.path").isEqualTo("/user/" + userA.getId())
+				.jsonPath("$.message").isEqualTo("Duplicate key, Username: " +
+				userA.getUsername() + " or Email: " + userA.getEmail() + " exists.");
+
+		// Try to update userA with the new username and verify it works
+		String newUsername = "updated_username";
+		String userAEmail = "email@aol.com";
+		userA.setUsername(newUsername);
+		userA.setEmail(userAEmail);
+		updateAndVerifyUser(userA, HttpStatus.OK)
+				.jsonPath("$.id").isEqualTo(userA.getId())
+				.jsonPath("$.username").isEqualTo(newUsername)
+				.jsonPath("$.email").isEqualTo(userAEmail)
+				.jsonPath("$.name").isEqualTo(userA.getName())
+				.jsonPath("$.version").isEqualTo(1);
+
+
+		//Make sure we have two entities in the database
 		StepVerifier.create(userService.userCount())
-				.expectNext(1L)
+				.expectNext(2L)
 				.verifyComplete();
 
 	}

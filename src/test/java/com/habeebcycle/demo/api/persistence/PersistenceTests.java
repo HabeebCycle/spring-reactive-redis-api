@@ -13,7 +13,7 @@ import redis.embedded.RedisServer;
 
 //@DataRedisTest(properties = {"spring.redis.password="})
 @SpringBootTest(properties = {"spring.redis.password="})
-public class PersistenceTests {
+public class  PersistenceTests {
 
     private final static RedisServer REDISSERVER = new RedisServer(6379);
 
@@ -51,17 +51,30 @@ public class PersistenceTests {
 
     @Test
     void createTest() {
-        User user = new User("username-1", "email-1", "name");
+        User userA = new User("username-1", "email-1", "name");
 
-        StepVerifier.create(repository.save(user))
+        StepVerifier.create(repository.save(userA))
                 .expectNextMatches(createdUser ->
-                        user.getId() != null && createdUser.getId().equals(user.getId()))
+                        userA.getId() != null && createdUser.getId().equals(userA.getId()))
                 .verifyComplete();
 
-        StepVerifier.create(repository.findById(user.getId()))
-                .expectNextMatches(foundUser -> assertEqualUser(user, foundUser))
+        StepVerifier.create(repository.findById(userA.getId()))
+                .expectNextMatches(foundUser -> assertEqualUser(userA, foundUser))
                 .verifyComplete();
 
+        // Save without username and verify that it fails
+        User userB = new User("", "emailB@email.com", "name");
+        StepVerifier.create(repository.save(userB))
+                .expectError(IllegalArgumentException.class)
+                .verify();
+
+        // Save without username and verify that it fails
+        User userC = new User("usernameB", "", "name");
+        StepVerifier.create(repository.save(userC))
+                .expectError(IllegalArgumentException.class)
+                .verify();
+
+        //Verify that the database has only savedUser & userA
         StepVerifier.create(repository.count())
                 .expectNext(2L)
                 .verifyComplete();
@@ -97,6 +110,9 @@ public class PersistenceTests {
         StepVerifier.create(repository.existsById(savedUser.getId()))
                 .expectNext(false)
                 .verifyComplete();
+
+        // This should also work since delete is an idempotent operation
+        StepVerifier.create(repository.deleteById(savedUser.getId())).verifyComplete();
 
         StepVerifier.create(repository.count())
                 .expectNext(0L)
@@ -134,8 +150,26 @@ public class PersistenceTests {
                 .expectError(DuplicateKeyException.class)
                 .verify();
 
+        // Add new user
+        User newUser = new User("username-2", "email-2", "name-2");
+        StepVerifier.create(repository.save(newUser))
+                .expectNextMatches(createdUser -> assertEqualUser(newUser, createdUser))
+                .verifyComplete();
+
         StepVerifier.create(repository.count())
-                .expectNext(1L)
+                .expectNext(2L)
+                .verifyComplete();
+
+        // Update savedUser with the above username-2 and verify duplicate error
+        savedUser.setUsername("username-2");
+        StepVerifier.create(repository.save(savedUser))
+                .expectError(DuplicateKeyException.class)
+                .verify();
+
+        // Verify that username and version didn't change
+        StepVerifier.create(repository.findById(savedUser.getId()))
+                .expectNextMatches(foundUser -> foundUser.getUsername().equals("username")
+                                        && foundUser.getVersion() == 0)
                 .verifyComplete();
     }
 

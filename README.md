@@ -19,8 +19,42 @@ mvn spring-boot:run
 ```
 
 On Docker
-You can either use the Google jib-maven plugin or use docker compose file attached.
-I have used jib-maven plugin in the project
+You can either use the Maven build-image, use the Google jib-maven plugin or use docker compose file attached.
+
+Maven build-image
+```xml
+<plugin>
+    <groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-maven-plugin</artifactId>
+</plugin>
+```
+then run
+```
+./mvnw spring-boot:build-image
+```
+To push to registry add and edit 
+```xml
+<!-- docs.spring.io/spring-boot/docs/current/maven-plugin/reference/htmlsingle/#buid-image-examples-->
+<plugin>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-maven-plugin</artifactId>
+    <configuration>
+        <image>
+            <name>docker.io/library/${project.build.finalName}</name>
+            <publish>true</publish>
+        </image>
+        <docker>
+            <publishRegistry>
+                <username>user</username>
+                <password>secret</password>
+                <url>https://docker.io/v1/</url>
+                <email>user@example.com</email>
+            </publishRegistry>
+        </docker>
+    </configuration>
+</plugin>
+```
+To use the Google jib-maven plugin in the project
 ```
 <dependency>
     <groupId>com.google.cloud.tools</groupId>
@@ -47,7 +81,7 @@ docker run --rm -p 6379:6379 redis -e redis-server --requirepass ${YOUR_PASS} --
 
 ## Deployment to kubernetes
 
-#### If you are using Play with K8s playground, follow these instruction to create cluster (https://labs.play-with-k8s.com/)
+#### If you are using Play with K8s playground, follow these instructions to create a cluster (https://labs.play-with-k8s.com/)
 
 You can bootstrap a cluster as follows:
 

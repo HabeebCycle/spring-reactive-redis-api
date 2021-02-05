@@ -45,7 +45,13 @@ public class UserRepoImpl implements UserRepository {
                     .thenReturn(user);
 
         if (user.getId() == null || user.getId().isEmpty()) {
-            return Mono.defer(() -> addNewUser(user));
+            String userId = UUID.randomUUID().toString().replaceAll("-", "");
+            user.setId(userId);
+            user.setVersion(0);
+
+            return Mono.defer(() -> addOrUpdateUser(user, existsByUsername(user.getUsername())
+                    .mergeWith(existsByEmail(user.getEmail()))
+                    .any(b -> b)));
         } else {
             return findById(user.getId())
                     .flatMap(u -> {
@@ -55,34 +61,25 @@ public class UserRepoImpl implements UserRepository {
                                             "This record has already been updated earlier by another object."));
                         } else {
                             user.setVersion(user.getVersion() + 1);
-                            return hashOperations.put(KEY, user.getId(), user)
-                                    .map(isSaved -> user);
+
+                            return Mono.defer(() -> {
+                                Mono<Boolean> exists = Mono.just(false);
+
+                                if (!u.getUsername().equals(user.getUsername())) {
+                                    exists = existsByUsername(user.getUsername());
+                                }
+                                if (!u.getEmail().equals(user.getEmail())) {
+                                    exists = existsByEmail(user.getEmail());
+                                }
+
+                                return addOrUpdateUser(user, exists);
+                            });
                         }
                     })
-                    .switchIfEmpty(Mono.defer(() -> addNewUser(user)));
+                    .switchIfEmpty(Mono.defer(() -> addOrUpdateUser(user, existsByUsername(user.getUsername())
+                            .mergeWith(existsByEmail(user.getEmail()))
+                            .any(b -> b))));
         }
-    }
-
-    // private utility method to add new user if not exist with username and email
-    private Mono<User> addNewUser(User user) {
-
-        //email and username should be unique
-        return existsByUsername(user.getUsername())
-                .mergeWith(existsByEmail(user.getEmail()))
-                .any(b -> b)
-                .flatMap(exists -> {
-                    if (exists) {
-                        return Mono.error(new DuplicateKeyException("Duplicate key, Username: " +
-                                user.getUsername() + " or Email: " + user.getEmail() + " exists."));
-                    } else {
-                        String userId = UUID.randomUUID().toString().replaceAll("-", "");
-                        user.setId(userId);
-                        user.setVersion(0);
-                        return hashOperations.put(KEY, user.getId(), user)
-                                .map(isSaved -> user);
-                    }
-                })
-                .thenReturn(user);
     }
 
     @Override
@@ -184,5 +181,40 @@ public class UserRepoImpl implements UserRepository {
         return null;
     }
 
+
+    // private utility method to add new user if not exist with username and email
+    private Mono<User> addOrUpdateUser(User user, Mono<Boolean> exists) {
+        return exists.flatMap(exist -> {
+            if (exist) {
+                return Mono.error(new DuplicateKeyException("Duplicate key, Username: " +
+                        user.getUsername() + " or Email: " + user.getEmail() + " exists."));
+            } else {
+                return hashOperations.put(KEY, user.getId(), user)
+                        .map(isSaved -> user);
+            }
+        })
+        .thenReturn(user);
+    }
+    /*
+    private Mono<User> addNewUser(User user) {
+
+        //email and username should be unique
+        return existsByUsername(user.getUsername())
+                .mergeWith(existsByEmail(user.getEmail()))
+                .any(b -> b)
+                .flatMap(exists -> {
+                    if (exists) {
+                        return Mono.error(new DuplicateKeyException("Duplicate key, Username: " +
+                                user.getUsername() + " or Email: " + user.getEmail() + " exists."));
+                    } else {
+                        String userId = UUID.randomUUID().toString().replaceAll("-", "");
+                        user.setId(userId);
+                        user.setVersion(0);
+                        return hashOperations.put(KEY, user.getId(), user)
+                                .map(isSaved -> user);
+                    }
+                })
+                .thenReturn(user);
+    }*/
 
 }
